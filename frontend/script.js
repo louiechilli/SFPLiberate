@@ -4,8 +4,13 @@
 const SFP_SERVICE_UUID = "8e60f02e-f699-4865-b83f-f40501752184";
 const WRITE_CHAR_UUID = "9280f26c-a56f-43ea-b769-d5d732e1ac67"; // For sending commands
 const NOTIFY_CHAR_UUID = "dc272a22-43f2-416b-8fa5-63a071542fac"; // For receiving data/logs
+// Note: Secondary notify characteristic exists but is not currently subscribed to or used.
+// Purpose is unclear from reverse engineering. May be used for file transfers, progress updates,
+// or battery-level pushes. Consider subscribing and logging to discover its function.
 const NOTIFY_CHAR_SECONDARY_UUID = "d587c47f-ac6e-4388-a31c-e6cd380ba043"; // Secondary notify (purpose TBD)
 const BLE_WRITE_CHUNK_SIZE = 20; // Conservative chunk size for maximum BLE compatibility
+const BLE_WRITE_CHUNK_DELAY_MS = 10; // Delay between chunks (ms). Can be reduced for faster writes if device supports it.
+const TESTED_FIRMWARE_VERSION = "1.0.10"; // Firmware version this app was developed and tested with
 // The frontend is reverse-proxied to the backend at /api by NGINX
 const API_BASE_URL = "/api";
 // Public community index (to be hosted on GitHub Pages)
@@ -210,6 +215,14 @@ function onDisconnected() {
     updateConnectionStatus(false);
     stopStatusMonitoring();
     deviceVersion = null;
+
+    // Reject any pending message listeners to prevent memory leaks and hanging promises
+    messageListeners.forEach(listener => {
+        clearTimeout(listener.timeoutId);
+        listener.reject(new Error("Device disconnected"));
+    });
+    messageListeners = [];
+
     // Optionally, try to reconnect
 }
 
@@ -259,7 +272,16 @@ async function requestDeviceStatus() {
 }
 
 /**
- * Starts periodic status monitoring
+ * Starts periodic status monitoring of the connected device.
+ *
+ * Note: This polls the device every 5 seconds regardless of whether the data
+ * is actively used, creating BLE traffic and battery drain. This approach was
+ * chosen for simplicity and to ensure status is always current. Future
+ * optimizations could include:
+ * - Only polling when status UI is visible
+ * - Event-driven updates instead of polling
+ * - User-configurable polling interval or manual refresh
+ * - Stopping monitoring during long operations (reads/writes)
  */
 function startStatusMonitoring() {
     if (statusCheckInterval) {
@@ -325,8 +347,8 @@ function handleNotifications(event) {
                 deviceVersion = versionMatch[1];
                 log(`Device firmware version: ${deviceVersion}`);
                 // Check if it's the expected version
-                if (deviceVersion !== '1.0.10') {
-                    log(`⚠️ Warning: This app was developed for firmware v1.0.10. You have v${deviceVersion}. Some features may not work correctly.`, true);
+                if (deviceVersion !== TESTED_FIRMWARE_VERSION) {
+                    log(`⚠️ Warning: This app was developed for firmware v${TESTED_FIRMWARE_VERSION}. You have v${deviceVersion}. Some features may not work correctly.`, true);
                 }
             }
         }
@@ -342,11 +364,18 @@ function handleNotifications(event) {
                 sfpStatus.dataset.status = "no";
             }
 
-            // Extract additional status info for logging
+            // Extract and display battery level
             const batteryMatch = textResponse.match(/bat:\[.\]\|\^?\|(\d+)%/);
             if (batteryMatch) {
-                // Could display battery in UI if desired
-                // For now, just note it in detailed logs
+                const batteryLevel = batteryMatch[1];
+                log(`Device battery level: ${batteryLevel}%`);
+
+                // Display battery level in UI if element exists
+                const batteryStatus = document.getElementById('batteryStatus');
+                if (batteryStatus) {
+                    batteryStatus.textContent = `Battery: ${batteryLevel}%`;
+                    batteryStatus.dataset.level = batteryLevel;
+                }
             }
         }
 
@@ -641,7 +670,12 @@ async function writeSfp(moduleId) {
                 }
 
                 // Small delay between chunks to avoid overwhelming the device
-                await new Promise(resolve => setTimeout(resolve, 10));
+                // Note: This conservative delay (~2KB/s for 256-byte EEPROM) prioritizes
+                // compatibility. Can be reduced (or set to 0) for faster writes if your
+                // device supports it. Adjust BLE_WRITE_CHUNK_DELAY_MS constant at top of file.
+                if (BLE_WRITE_CHUNK_DELAY_MS > 0) {
+                    await new Promise(resolve => setTimeout(resolve, BLE_WRITE_CHUNK_DELAY_MS));
+                }
             } catch (chunkError) {
                 throw new Error(`Failed to write chunk ${i + 1}/${totalChunks}: ${chunkError}`);
             }
@@ -650,10 +684,17 @@ async function writeSfp(moduleId) {
         log("All data chunks sent successfully.");
         log("Waiting for write completion confirmation...");
 
-        // Wait for completion message (should monitor notifications for "SIF write stop" or similar)
-        await new Promise(resolve => setTimeout(resolve, 1000));
-
-        log("✓ Write operation completed!", false);
+        // Wait for completion message. The device can send either message, so we'll race them.
+        try {
+            await Promise.race([
+                waitForMessage("SIF write stop", 10000),
+                waitForMessage("SIF write complete", 10000)
+            ]);
+            log("✓ Write operation completed!", false);
+        } catch (error) {
+            log(`Warning: ${error.message}. Write may have completed anyway.`, true);
+            log("✓ Write operation likely completed (no confirmation received)", false);
+        }
         log("⚠️ IMPORTANT: Verify the write by reading the module back and comparing data.", false);
 
         alert(
