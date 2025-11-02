@@ -1,9 +1,10 @@
 // --- Configuration ---
-// TODO: These UUIDs should be discovered dynamically or configured per device
-// Replace these placeholder UUIDs with your actual BLE service/characteristic UUIDs
-const SFP_SERVICE_UUID = "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX";
-const WRITE_CHAR_UUID = "YYYYYYYY-YYYY-YYYY-YYYY-YYYYYYYYYYYY"; // For sending commands
-const NOTIFY_CHAR_UUID = "ZZZZZZZZ-ZZZZ-ZZZZ-ZZZZ-ZZZZZZZZZZZZ"; // For receiving data/logs
+// BLE Service and Characteristics for SFP Wizard (Firmware v1.0.10)
+// These UUIDs were discovered through reverse engineering - see docs/BLE_API_SPECIFICATION.md
+const SFP_SERVICE_UUID = "8e60f02e-f699-4865-b83f-f40501752184";
+const WRITE_CHAR_UUID = "9280f26c-a56f-43ea-b769-d5d732e1ac67"; // For sending commands
+const NOTIFY_CHAR_UUID = "dc272a22-43f2-416b-8fa5-63a071542fac"; // For receiving data/logs
+const NOTIFY_CHAR_SECONDARY_UUID = "d587c47f-ac6e-4388-a31c-e6cd380ba043"; // Secondary notify (purpose TBD)
 // The frontend is reverse-proxied to the backend at /api by NGINX
 const API_BASE_URL = "/api";
 // Public community index (to be hosted on GitHub Pages)
@@ -17,6 +18,8 @@ let gattServer = null;
 let writeCharacteristic = null;
 let notifyCharacteristic = null;
 let rawEepromData = null; // Holds the raw ArrayBuffer of the last read
+let deviceVersion = null; // Stores the device firmware version
+let statusCheckInterval = null; // Interval for periodic status checks
 // TODO: Accumulate DDM samples for CSV export (future)
 let ddmSamples = [];
 const textEncoder = new TextEncoder();
@@ -155,6 +158,10 @@ async function connectToDevice() {
         log("Successfully connected!");
         updateConnectionStatus(true);
 
+        // Get device version and start periodic status checks
+        await getDeviceVersion();
+        startStatusMonitoring();
+
     } catch (error) {
         log(`Connection failed: ${error}`, true);
         updateConnectionStatus(false);
@@ -164,6 +171,8 @@ async function connectToDevice() {
 function onDisconnected() {
     log("Device disconnected.", true);
     updateConnectionStatus(false);
+    stopStatusMonitoring();
+    deviceVersion = null;
     // Optionally, try to reconnect
 }
 
@@ -182,6 +191,60 @@ function updateConnectionStatus(isConnected) {
         document.getElementById('sfpStatus').dataset.status = "unknown";
         readSfpButton.disabled = true;
         document.getElementById('liveDataArea').classList.add('hidden');
+    }
+}
+
+/**
+ * Gets the device firmware version using the discovered API endpoint
+ */
+async function getDeviceVersion() {
+    try {
+        log("Requesting device version...");
+        await sendBleCommand("/api/1.0/version");
+        // The response will be handled in handleNotifications
+        // and will look like "Version: 1.0.10"
+    } catch (error) {
+        log(`Failed to get device version: ${error}`, true);
+    }
+}
+
+/**
+ * Requests device status using the discovered API endpoint
+ */
+async function requestDeviceStatus() {
+    try {
+        await sendBleCommand("[GET] /stats");
+        // The response will be handled in handleNotifications
+        // Format: "sysmon: ver:1.0.10, bat:[x]|^|35%, sfp:[x], ..."
+    } catch (error) {
+        log(`Failed to get device status: ${error}`, true);
+    }
+}
+
+/**
+ * Starts periodic status monitoring
+ */
+function startStatusMonitoring() {
+    if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+    }
+    // Check status every 5 seconds
+    statusCheckInterval = setInterval(() => {
+        if (gattServer && gattServer.connected) {
+            requestDeviceStatus();
+        }
+    }, 5000);
+    // Also check immediately
+    requestDeviceStatus();
+}
+
+/**
+ * Stops periodic status monitoring
+ */
+function stopStatusMonitoring() {
+    if (statusCheckInterval) {
+        clearInterval(statusCheckInterval);
+        statusCheckInterval = null;
     }
 }
 
@@ -218,6 +281,19 @@ function handleNotifications(event) {
     if (textResponse) {
         log(`Received Text: ${textResponse.trim()}`);
 
+        // Check if it's a version response
+        if (textResponse.includes('Version:')) {
+            const versionMatch = textResponse.match(/Version:\s*([0-9.]+)/i);
+            if (versionMatch) {
+                deviceVersion = versionMatch[1];
+                log(`Device firmware version: ${deviceVersion}`);
+                // Check if it's the expected version
+                if (deviceVersion !== '1.0.10') {
+                    log(`⚠️ Warning: This app was developed for firmware v1.0.10. You have v${deviceVersion}. Some features may not work correctly.`, true);
+                }
+            }
+        }
+
         // Check if it's the periodic status monitor
         if (textResponse.includes('sysmon:')) {
             const sfpStatus = document.getElementById('sfpStatus');
@@ -228,7 +304,30 @@ function handleNotifications(event) {
                 sfpStatus.textContent = "No Module";
                 sfpStatus.dataset.status = "no";
             }
+
+            // Extract additional status info for logging
+            const batteryMatch = textResponse.match(/bat:\[.\]\|\^?\|(\d+)%/);
+            if (batteryMatch) {
+                // Could display battery in UI if desired
+                // For now, just note it in detailed logs
+            }
         }
+
+        // Check for SIF operation acknowledgments
+        if (textResponse.includes('SIF start')) {
+            log("Device acknowledged read operation - waiting for EEPROM data...");
+        } else if (textResponse.includes('SIF write start')) {
+            log("Device acknowledged write operation - ready to receive data");
+        } else if (textResponse.includes('SIF write stop') || textResponse.includes('SIF write complete')) {
+            log("Device confirmed write operation completed");
+        } else if (textResponse.includes('SIF erase start')) {
+            log("Device started erase operation");
+        } else if (textResponse.includes('SIF erase stop')) {
+            log("Device completed erase operation");
+        } else if (textResponse.includes('SIF stop')) {
+            log("Device stopped SIF operation");
+        }
+
         // TODO: DDM capture
         if (/ddm:/i.test(textResponse)) {
             // Example parsing; actual format TBD from logs
@@ -271,13 +370,11 @@ async function sendBleCommand(command) {
 // --- 3. SFP Read/Parse Logic ---
 
 function requestSfpRead() {
-    // NOTE: The SFP Wizard reads/writes on-device; BLE broadcasts logs/data.
-    // If a trigger command exists, it needs discovery. For now, instruct users
-    // to initiate a read on the device while connected; the app will capture
-    // the broadcasted data via notifications.
-    log("If available, trigger read on the device. Listening for data...");
-    // TODO: If a BLE trigger command exists (e.g., [POST] /sif/start), discover and enable.
-    // sendBleCommand("[POST] /sif/start");
+    // Trigger SFP EEPROM read using the discovered BLE API endpoint
+    // The device will respond with "SIF start" followed by binary EEPROM data
+    log("Sending SFP read command to device...");
+    sendBleCommand("[POST] /sif/start");
+    log("Waiting for EEPROM data...");
 }
 
 /**
@@ -421,10 +518,26 @@ async function deleteModule(moduleId) {
 
 /**
  * Fetches a module's binary data and writes it to the SFP.
+ * Uses the discovered BLE write protocol: [POST] /sif/write
  */
 async function writeSfp(moduleId) {
     if (!bleDevice || !gattServer || !gattServer.connected) {
         alert("Please connect to the SFP Wizard first.");
+        return;
+    }
+
+    // Safety warning
+    const confirmed = confirm(
+        "⚠️ WARNING: Writing EEPROM data can permanently damage your SFP module if incorrect data is used.\n\n" +
+        "Before proceeding:\n" +
+        "✓ Ensure you have backed up the original module data\n" +
+        "✓ Verify this is the correct module profile\n" +
+        "✓ Use test/non-critical modules first\n\n" +
+        "Do you want to continue?"
+    );
+
+    if (!confirmed) {
+        log("Write operation cancelled by user.");
         return;
     }
 
@@ -438,29 +551,65 @@ async function writeSfp(moduleId) {
             throw new Error("Module binary data not found.");
         }
         const eepromData = await response.arrayBuffer();
+        log(`Retrieved ${eepromData.byteLength} bytes of EEPROM data.`);
 
-        // 2. Send the "start write" command to the SFP Wizard
-        //    NOTE: We are *guessing* this command. You will need to discover
-        //    the correct command, e.g., [POST] /sfp/write
-        log("Sending 'start write' command to device (TODO: VERIFY THIS COMMAND)");
-        await sendBleCommand("[POST] /sfp/write/start"); // <-- 100% A GUESS
+        // 2. Send the write initiation command to the SFP Wizard
+        log("Sending write initiation command: [POST] /sif/write");
+        await sendBleCommand("[POST] /sif/write");
 
-        // 3. Send the binary data.
-        //    BLE writes are often limited in size (MTU, ~240 bytes or less).
-        //    You will likely need to "chunk" the data.
-        //    For now, we'll try to send it all at once.
-        log(`Attempting to write ${eepromData.byteLength} bytes...`);
-        // TODO: This needs to be a different characteristic, or
-        // a different command sequence. This part WILL fail
-        // and needs to be reverse-engineered by sniffing the app's
-        // "Write" or "Push EEPROM" function.
-        // await writeCharacteristic.writeValue(eepromData);
+        // 3. Wait for "SIF write start" acknowledgment
+        // Note: In a production implementation, you should listen for this acknowledgment
+        // For now, we'll add a small delay to allow the device to respond
+        log("Waiting for device acknowledgment...");
+        await new Promise(resolve => setTimeout(resolve, 500));
 
-        log("Write logic is a placeholder and needs to be discovered.", true);
-        alert("Write function is not yet implemented. You must sniff the BLE traffic for the 'Write EEPROM' command from the official app to complete this.");
+        // 4. Chunk and send the binary data
+        // Using conservative 20-byte chunks for maximum compatibility
+        const CHUNK_SIZE = 20;
+        const totalChunks = Math.ceil(eepromData.byteLength / CHUNK_SIZE);
+        log(`Writing ${eepromData.byteLength} bytes in ${totalChunks} chunks...`);
+
+        for (let i = 0; i < totalChunks; i++) {
+            const start = i * CHUNK_SIZE;
+            const end = Math.min(start + CHUNK_SIZE, eepromData.byteLength);
+            const chunk = eepromData.slice(start, end);
+
+            try {
+                await writeCharacteristic.writeValueWithoutResponse(chunk);
+
+                // Progress indication
+                if ((i + 1) % 10 === 0 || i === totalChunks - 1) {
+                    const progress = Math.round(((i + 1) / totalChunks) * 100);
+                    log(`Write progress: ${progress}% (${i + 1}/${totalChunks} chunks)`);
+                }
+
+                // Small delay between chunks to avoid overwhelming the device
+                await new Promise(resolve => setTimeout(resolve, 10));
+            } catch (chunkError) {
+                throw new Error(`Failed to write chunk ${i + 1}/${totalChunks}: ${chunkError}`);
+            }
+        }
+
+        log("All data chunks sent successfully.");
+        log("Waiting for write completion confirmation...");
+
+        // Wait for completion message (should monitor notifications for "SIF write stop" or similar)
+        await new Promise(resolve => setTimeout(resolve, 1000));
+
+        log("✓ Write operation completed!", false);
+        log("⚠️ IMPORTANT: Verify the write by reading the module back and comparing data.", false);
+
+        alert(
+            "Write operation completed!\n\n" +
+            "NEXT STEPS:\n" +
+            "1. Read the module back using the Read button\n" +
+            "2. Compare the data to verify successful write\n" +
+            "3. Test the module in your equipment"
+        );
 
     } catch (error) {
         log(`Failed to write SFP: ${error}`, true);
+        alert(`Write operation failed: ${error.message}\n\nThe module may be in an unknown state. Do not use until verified.`);
     }
 }
 

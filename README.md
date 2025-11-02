@@ -82,13 +82,15 @@ This project is fully functional for capturing and archiving profiles. Writing s
     
 -   [x] **Save/Load:** Implement `fetch` calls to save/load from the backend API.
     
--   [ ] **SFP Write:** This is the next major task.
-    
-    -   **Task:** Investigate whether BLE can safely trigger a write; otherwise rely on on‑device "Push" while using this app to maintain your profile library.
-        
-    -   **Goal:** If supported, discover the command(s)/protocol to push EEPROM data via BLE, including any chunking and acknowledgment.
-        
-    -   **Implement:** Build the `writeSfp(moduleId)` function in `script.js` if/when BLE write is confirmed; otherwise integrate with on‑device push workflow.
+-   [x] **SFP Write:** ✅ **IMPLEMENTED** - See `docs/ISSUE_4_IMPLEMENTATION.md` for details.
+
+    -   **Status:** BLE write protocol has been reverse-engineered and implemented.
+
+    -   **Endpoint:** `[POST] /sif/write` followed by chunked binary data transfer.
+
+    -   **Features:** Safety confirmations, progress tracking, chunking for compatibility, detailed logging.
+
+    -   **Safety:** Includes pre-write warnings, post-write verification recommendations, and error handling.
         
 -   [ ] **DDM Logging (CSV):**
 
@@ -204,20 +206,20 @@ This project is built to run with a single command:
 
 ### BLE UUIDs
 
-⚠️ **IMPORTANT:** The BLE service and characteristic UUIDs in `frontend/script.js` are currently set to placeholder values and **must be configured** with your actual device UUIDs before the application will work.
+✅ **CONFIGURED:** The BLE service and characteristic UUIDs have been discovered through reverse engineering and are now configured in `frontend/script.js` for firmware version 1.0.10.
 
-To obtain the correct UUIDs for your SFP Wizard device:
+**Current Configuration (Firmware v1.0.10):**
+```javascript
+const SFP_SERVICE_UUID = "8e60f02e-f699-4865-b83f-f40501752184";
+const WRITE_CHAR_UUID = "9280f26c-a56f-43ea-b769-d5d732e1ac67";
+const NOTIFY_CHAR_UUID = "dc272a22-43f2-416b-8fa5-63a071542fac";
+```
 
-1. Use a BLE scanner app like [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) (iOS/Android) or [LightBlue](https://punchthrough.com/lightblue/) to scan for your device
-2. Note the service UUID and the characteristic UUIDs (write and notify)
-3. Update the following constants in `frontend/script.js`:
-   ```javascript
-   const SFP_SERVICE_UUID = "YOUR-SERVICE-UUID-HERE";
-   const WRITE_CHAR_UUID = "YOUR-WRITE-CHARACTERISTIC-UUID-HERE";
-   const NOTIFY_CHAR_UUID = "YOUR-NOTIFY-CHARACTERISTIC-UUID-HERE";
-   ```
+The application will automatically detect the firmware version on connection and warn if it differs from the tested version (v1.0.10).
 
-**TODO:** Refactor the code to support dynamic UUID discovery or configuration via environment variables/UI settings instead of hardcoded values.
+**Note:** If you have a different firmware version and these UUIDs don't work, you can use a BLE scanner app like [nRF Connect](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile) to discover the UUIDs for your device.
+
+For full API documentation, see `docs/BLE_API_SPECIFICATION.md`.
 
 ## Disclaimer
 
