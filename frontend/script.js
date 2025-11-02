@@ -80,10 +80,23 @@ function isWebBluetoothAvailable() {
     return !!(navigator && navigator.bluetooth && typeof navigator.bluetooth.requestDevice === 'function');
 }
 
+/**
+ * Detects if the browser is Safari (macOS/iOS).
+ * Note: As of Safari 18 / iOS 18 (2024), Safari does NOT support Web Bluetooth API.
+ * Apple's position is "Not Considering" due to privacy/fingerprinting concerns.
+ */
 function isSafari() {
     const ua = navigator.userAgent;
     const isSafari = /Safari\//.test(ua) && !/Chrome\//.test(ua) && !/Chromium\//.test(ua) && !/Edg\//.test(ua);
     return isSafari;
+}
+
+/**
+ * Detects if the browser is running on iOS (iPhone/iPad).
+ */
+function isIOS() {
+    return /iPhone|iPad|iPod/.test(navigator.userAgent) ||
+           (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1); // iPad on iOS 13+
 }
 
 function ensureSupportBanner() {
@@ -104,10 +117,16 @@ function ensureSupportBanner() {
 }
 
 function supportMessageForBrowser() {
-    if (isSafari()) {
-        return 'Web Bluetooth is limited in Safari (especially on iOS). Use Chrome/Edge if possible. On macOS Safari, enable Web Bluetooth in Develop > Experimental Features if available.';
+    if (isSafari() || isIOS()) {
+        if (isIOS()) {
+            return '⚠️ Safari on iOS does NOT support Web Bluetooth API. Apple has declined to implement it due to privacy concerns. ' +
+                   'To use this app on iOS: Download the "Bluefy – Web BLE Browser" app from the App Store, ' +
+                   'which provides full Web Bluetooth support. Alternatively, use Chrome/Edge on desktop.';
+        }
+        return '⚠️ Safari does NOT support Web Bluetooth API (as of Safari 18). Apple\'s position is "Not Considering" this feature. ' +
+               'Please use Chrome, Edge, or Opera instead. No experimental flags are available to enable it.';
     }
-    return 'This browser does not support Web Bluetooth. Please use a compatible browser (e.g., Chrome, Edge, or Opera).';
+    return 'This browser does not support Web Bluetooth API. Please use a compatible browser (Chrome, Edge, Opera, or Bluefy on iOS).';
 }
 
 function disableBleUI() {
@@ -165,19 +184,23 @@ function waitForMessage(pattern, timeoutMs = 5000) {
 async function connectToDevice() {
     log("Requesting BLE device...");
     try {
-        // Some browsers (notably Safari) may not support filtering by custom 128-bit UUIDs.
-        // Attempt a filtered request first; if it fails or we're on Safari, fall back to acceptAllDevices.
-        const wantsFallback = isSafari();
-        let requestOptions = wantsFallback
-            ? { acceptAllDevices: true, optionalServices: [SFP_SERVICE_UUID] }
-            : { filters: [{ services: [SFP_SERVICE_UUID] }], optionalServices: [SFP_SERVICE_UUID] };
+        // Some browsers may not support filtering by custom 128-bit UUIDs.
+        // Attempt a filtered request first; if it fails, fall back to acceptAllDevices.
+        // Note: Safari does NOT support Web Bluetooth API at all, so this won't work there.
+        let requestOptions = {
+            filters: [{ services: [SFP_SERVICE_UUID] }],
+            optionalServices: [SFP_SERVICE_UUID]
+        };
 
         try {
             bleDevice = await navigator.bluetooth.requestDevice(requestOptions);
         } catch (firstErr) {
             // Fallback path for browsers that reject custom UUID filters
-            log(`Filtered request failed (${firstErr}). Trying broad scan...`);
-            bleDevice = await navigator.bluetooth.requestDevice({ acceptAllDevices: true, optionalServices: [SFP_SERVICE_UUID] });
+            log(`Filtered request failed (${firstErr.message}). Trying broad scan...`);
+            bleDevice = await navigator.bluetooth.requestDevice({
+                acceptAllDevices: true,
+                optionalServices: [SFP_SERVICE_UUID]
+            });
         }
 
         bleDevice.addEventListener('gattserverdisconnected', onDisconnected);
@@ -722,9 +745,9 @@ function bufferToBase64(buffer) {
 // Limited scanning functionality to discover devices vs static UUIDs
 // TODO: Use the Bluetooth Scanning API (requestLEScan) when available to
 // discover SFP Wizard devices passively and present them in a list.
-// This API is currently supported in Chromium-based browsers; Safari support
-// is limited. For Safari/macOS with experimental Web Bluetooth, fall back to
-// requestDevice with acceptAllDevices and instruct the user to pick the device.
+// This API is currently supported in Chromium-based browsers only.
+// Note: Safari does NOT support Web Bluetooth API at all (as of Safari 18 / iOS 18).
+// Users on iOS must use a third-party browser like Bluefy that implements Web BLE.
 async function limitedScanTODO() {
     try {
         if (navigator.bluetooth && typeof navigator.bluetooth.requestLEScan === 'function') {

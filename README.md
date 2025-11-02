@@ -101,7 +101,7 @@ This project is fully functional for capturing and archiving profiles. Writing s
     
     -   **Task:** Add support for discovering devices without relying solely on static service UUID filters.
     
-    -   **Current:** A scaffold `limitedScanTODO()` exists in `frontend/script.js`. Chromium browsers can use the Bluetooth Scanning API (`navigator.bluetooth.requestLEScan`) to passively discover devices; Safari support is limited. The app falls back to a broad `requestDevice({ acceptAllDevices: true, optionalServices: [...] })` when necessary (e.g., Safari/macOS).
+    -   **Current:** A scaffold `limitedScanTODO()` exists in `frontend/script.js`. Chromium browsers can use the Bluetooth Scanning API (`navigator.bluetooth.requestLEScan`) to passively discover devices. The app falls back to a broad `requestDevice({ acceptAllDevices: true, optionalServices: [...] })` when UUID filtering is not supported.
     
     -   **Implement:** Hook advertisement events to a small UI list, and allow selecting the SFP Wizard from discovered devices.
 
@@ -133,10 +133,24 @@ This project is fully functional for capturing and archiving profiles. Writing s
     -   **Duplicate detection:** Use SHA‑256 during import/export; dedupe on save/import.
     -   **Backups:** Export all modules (and future DDM logs) to CSV/ZIP; support manual import of those files.
 
-## Safari Support
+## Browser Compatibility
 
-- iOS/iPadOS: Web Bluetooth is not supported. Use Chrome on Android or a desktop Chromium browser.
-- macOS Safari: Recent versions have experimental Web Bluetooth support; enable from Develop → Experimental Features. Filtering by custom 128‑bit UUIDs may not work; the app will automatically fall back to broader device selection and then access the service via `optionalServices`.
+### ✅ Supported
+- **Chrome** (Desktop, Android, ChromeOS) - Full Web Bluetooth support
+- **Edge** (Desktop, Android) - Full Web Bluetooth support
+- **Opera** (Desktop, Android) - Full Web Bluetooth support
+- **Bluefy Browser** (iOS App Store) - Third-party iOS browser with full Web Bluetooth support
+
+### ❌ NOT Supported
+- **Safari** (macOS, iOS, iPadOS) - **NO Web Bluetooth support** as of Safari 18 / iOS 18
+  - Apple's position: "Not Considering" this feature (privacy/fingerprinting concerns)
+  - **No experimental flags available** - previous documentation suggesting this was incorrect
+- **Firefox** - No Web Bluetooth support
+
+### iOS Users
+Since Safari does not support Web Bluetooth API, iOS users have two options:
+1. **Download "Bluefy – Web BLE Browser"** from the App Store (provides full Web Bluetooth support)
+2. **Use a desktop computer** with Chrome, Edge, or Opera
 
 ## Build & Run Instructions
 
@@ -144,9 +158,13 @@ This project is fully functional for capturing and archiving profiles. Writing s
 
 1.  **Docker & Docker Compose:** You must have Docker installed to run the backend.
     
-2.  **A Compatible Browser:** Web Bluetooth is required. This works on **Google Chrome** (Desktop & Android), **Edge**, and **Opera**. Firefox does not support Web Bluetooth. Safari support is limited:
-    - iOS/iPadOS Safari: not supported.
-    - macOS Safari: limited/experimental in recent versions; enable Web Bluetooth in Develop → Experimental Features if available. The app falls back to broader device selection when filtering by custom UUIDs is not supported.
+2.  **A Compatible Browser:** Web Bluetooth API is required. Supported browsers:
+    - **Chrome** (Desktop, Android, ChromeOS) ✅
+    - **Edge** (Desktop, Android) ✅
+    - **Opera** (Desktop, Android) ✅
+    - **Bluefy Browser** (iOS) ✅ - Download from App Store for iOS devices
+    - **Safari** (all platforms) ❌ - NOT supported (see Browser Compatibility section above)
+    - **Firefox** ❌ - NOT supported
     
 3.  **Hardware:** A Unifi SFP Wizard device.
     
