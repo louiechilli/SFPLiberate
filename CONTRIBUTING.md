@@ -413,7 +413,7 @@ def add_module(name: str, vendor: str, model: str, serial: str,
 - Firmware version tested (critical—behavior may change)
 
 ### Tools
-- **nRF Connect**: [Nordic Semiconductor](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile)
+- **nRF Connect**: [Mobile](https://www.nordicsemi.com/Products/Development-tools/nRF-Connect-for-mobile), [Desktop](https://www.nordicsemi.com/Products/Development-tools/nrf-connect-for-desktop)
 - **Wireshark with Bluetooth plugin**: Desktop packet capture
 - **Browser DevTools**: Monitor Web Bluetooth API calls
 
