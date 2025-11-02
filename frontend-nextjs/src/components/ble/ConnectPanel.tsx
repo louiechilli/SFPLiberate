@@ -4,6 +4,8 @@ import { ConnectionModeSelector } from './ConnectionModeSelector';
 import type { ConnectionMode } from '@/lib/ble/types';
 import { connect, requestSfpRead, saveCurrentModule, listModules, connectViaProxyAddress } from '@/lib/ble/manager';
 import { getBleState, subscribe } from '@/lib/ble/store';
+import { ProxyDiscovery } from '@/components/ble/ProxyDiscovery';
+import { ConnectionStatus } from '@/components/ble/ConnectionStatus';
 import { loadActiveProfile, saveActiveProfile } from '@/lib/ble/profile';
 
 export function ConnectPanel() {
@@ -119,22 +121,8 @@ export function ConnectPanel() {
       </div>
       <div style={{ display: 'flex', gap: 16 }}>
         <div>
-          <div>
-            <strong>BLE:</strong> {state.connected ? 'Connected' : 'Disconnected'}
-          </div>
-          <div>
-            <strong>Type:</strong> {state.connectionType}
-          </div>
-          <div>
-            <strong>Firmware:</strong> {state.deviceVersion ?? '—'}
-          </div>
-          <div>
-            <strong>SFP Present:</strong> {state.sfpPresent === undefined ? 'Unknown' : state.sfpPresent ? 'Yes' : 'No'}
-          </div>
-          <div>
-            <strong>Battery:</strong> {state.batteryPct === undefined ? '—' : `${state.batteryPct}%`}
-          </div>
-          <div>
+          <ConnectionStatus />
+          <div className="mt-2 text-sm">
             <strong>EEPROM:</strong> {state.rawEepromData ? `${state.rawEepromData.byteLength} bytes` : '—'}
           </div>
         </div>
@@ -148,6 +136,10 @@ export function ConnectPanel() {
             ))}
           </ul>
         </div>
+      </div>
+      <div>
+        <strong>Proxy Discovery</strong>
+        <ProxyDiscovery />
       </div>
       <div>
         <strong>Profile</strong>

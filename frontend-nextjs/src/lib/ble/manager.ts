@@ -34,6 +34,8 @@ export type ActiveConnection = {
 };
 
 let active: ActiveConnection | null = null;
+type MsgListener = { pattern: string | RegExp; resolve: (text: string) => void; reject: (e: any) => void; timeoutId: any };
+const listeners: MsgListener[] = [];
 
 export async function connect(selected: ConnectionMode) {
   const mode = resolveConnectionMode(selected);
@@ -193,6 +195,20 @@ function onText(text: string) {
       break;
     }
   }
+
+  // Resolve any listeners waiting for specific patterns
+  const matched = listeners.filter((l) => (typeof l.pattern === 'string' ? text.includes(l.pattern) : (l.pattern as RegExp).test(text)));
+  matched.forEach((l) => {
+    clearTimeout(l.timeoutId);
+    l.resolve(text);
+  });
+  if (matched.length) {
+    // Remove matched
+    for (const m of matched) {
+      const idx = listeners.indexOf(m);
+      if (idx >= 0) listeners.splice(idx, 1);
+    }
+  }
 }
 
 function onBinary(buf: ArrayBuffer) {
@@ -299,4 +315,55 @@ export async function connectViaProxyAddress(address: string, adapter?: string) 
   setConnectionType('Proxy (via Backend)');
   await getDeviceVersion();
   scheduleStatusMonitoring();
+}
+
+export async function discoverProxyDevices({ timeout = 5, adapter }: { timeout?: number; adapter?: string }) {
+  // Use an existing proxy connection if present; otherwise create a transient one
+  let proxy = active?.proxy;
+  if (!proxy) {
+    proxy = new BLEProxyClient(buildDefaultProxyWsUrl('/api/v1/ble/ws'));
+    await proxy.connect();
+  } else if (!proxy.connected) {
+    await proxy.connect();
+  }
+  const results = await proxy.discoverDevices({ serviceUuid: null, timeout, adapter: adapter ?? null });
+  return results as Array<{ name?: string; address?: string; rssi?: number }>;
+}
+
+export function waitForMessage(pattern: string | RegExp, timeoutMs = 5000) {
+  return new Promise<string>((resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      const idx = listeners.findIndex((x) => x.resolve === resolve);
+      if (idx >= 0) listeners.splice(idx, 1);
+      reject(new Error(`Timeout waiting for message: ${String(pattern)}`));
+    }, timeoutMs);
+    listeners.push({ pattern, resolve, reject, timeoutId });
+  });
+}
+
+export async function writeSfpFromModuleId(moduleId: number) {
+  const base = features.api.baseUrl;
+  // 1. Fetch binary EEPROM
+  const res = await fetch(`${base}/v1/modules/${moduleId}/eeprom`);
+  if (!res.ok) throw new Error('Module binary data not found');
+  const buf = await res.arrayBuffer();
+  logLine(`Retrieved ${buf.byteLength} bytes of EEPROM data.`);
+  // 2. Initiate write
+  await sendBleCommand('[POST] /sif/write');
+  // 3. Optional ack wait
+  try {
+    await waitForMessage('SIF write start', 5000);
+    logLine('Device ready to receive EEPROM data.');
+  } catch (e: any) {
+    logLine(`Warning: ${e?.message || String(e)}. Proceeding anyway...`);
+  }
+  // 4. Chunk write
+  await writeSfpFromBuffer(buf);
+  // 5. Completion ack
+  try {
+    await Promise.race([waitForMessage('SIF write stop', 10000), waitForMessage('SIF write complete', 10000)]);
+    logLine('Write operation completed.');
+  } catch (e: any) {
+    logLine(`Warning: ${e?.message || String(e)}. Write may have completed.`);
+  }
 }
