@@ -5,6 +5,7 @@ const SFP_SERVICE_UUID = "8e60f02e-f699-4865-b83f-f40501752184";
 const WRITE_CHAR_UUID = "9280f26c-a56f-43ea-b769-d5d732e1ac67"; // For sending commands
 const NOTIFY_CHAR_UUID = "dc272a22-43f2-416b-8fa5-63a071542fac"; // For receiving data/logs
 const NOTIFY_CHAR_SECONDARY_UUID = "d587c47f-ac6e-4388-a31c-e6cd380ba043"; // Secondary notify (purpose TBD)
+const BLE_WRITE_CHUNK_SIZE = 20; // Conservative chunk size for maximum BLE compatibility
 // The frontend is reverse-proxied to the backend at /api by NGINX
 const API_BASE_URL = "/api";
 // Public community index (to be hosted on GitHub Pages)
@@ -20,6 +21,7 @@ let notifyCharacteristic = null;
 let rawEepromData = null; // Holds the raw ArrayBuffer of the last read
 let deviceVersion = null; // Stores the device firmware version
 let statusCheckInterval = null; // Interval for periodic status checks
+let messageListeners = []; // Array of {pattern: string, resolve: function, reject: function, timeout: number}
 // TODO: Accumulate DDM samples for CSV export (future)
 let ddmSamples = [];
 const textEncoder = new TextEncoder();
@@ -117,6 +119,41 @@ function log(message, isError = false) {
         entry.style.color = "var(--error-color)";
     }
     logConsole.prepend(entry);
+}
+
+// --- Message Waiting Helper ---
+/**
+ * Waits for a specific message pattern from the BLE device.
+ * Returns a promise that resolves when a notification containing the pattern is received.
+ * Includes a timeout as a safety fallback.
+ * @param {string} pattern - The text pattern to match in incoming notifications
+ * @param {number} timeoutMs - Timeout in milliseconds (default: 5000)
+ * @returns {Promise<string>} - Resolves with the matched message text
+ */
+function waitForMessage(pattern, timeoutMs = 5000) {
+    return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+            // Remove this listener from the array
+            const index = messageListeners.findIndex(listener => listener.resolve === resolve);
+            if (index !== -1) {
+                messageListeners.splice(index, 1);
+            }
+            reject(new Error(`Timeout waiting for message: "${pattern}"`));
+        }, timeoutMs);
+
+        messageListeners.push({
+            pattern,
+            resolve: (message) => {
+                clearTimeout(timeoutId);
+                resolve(message);
+            },
+            reject: (error) => {
+                clearTimeout(timeoutId);
+                reject(error);
+            },
+            timeoutId
+        });
+    });
 }
 
 // --- 1. BLE Connection Logic ---
@@ -314,18 +351,35 @@ function handleNotifications(event) {
         }
 
         // Check for SIF operation acknowledgments
-        if (textResponse.includes('SIF start')) {
-            log("Device acknowledged read operation - waiting for EEPROM data...");
-        } else if (textResponse.includes('SIF write start')) {
-            log("Device acknowledged write operation - ready to receive data");
-        } else if (textResponse.includes('SIF write stop') || textResponse.includes('SIF write complete')) {
-            log("Device confirmed write operation completed");
-        } else if (textResponse.includes('SIF erase start')) {
-            log("Device started erase operation");
-        } else if (textResponse.includes('SIF erase stop')) {
-            log("Device completed erase operation");
-        } else if (textResponse.includes('SIF stop')) {
-            log("Device stopped SIF operation");
+        const ackMessages = {
+            'SIF start': "Device acknowledged read operation - waiting for EEPROM data...",
+            'SIF write start': "Device acknowledged write operation - ready to receive data",
+            'SIF write stop': "Device confirmed write operation completed",
+            'SIF write complete': "Device confirmed write operation completed",
+            'SIF erase start': "Device started erase operation",
+            'SIF erase stop': "Device completed erase operation",
+            'SIF stop': "Device stopped SIF operation",
+        };
+
+        for (const [key, message] of Object.entries(ackMessages)) {
+            if (textResponse.includes(key)) {
+                log(message);
+
+                // Notify any waiting listeners
+                const matchedListeners = messageListeners.filter(listener =>
+                    textResponse.includes(listener.pattern)
+                );
+                matchedListeners.forEach(listener => {
+                    listener.resolve(textResponse);
+                    // Remove from array
+                    const index = messageListeners.indexOf(listener);
+                    if (index !== -1) {
+                        messageListeners.splice(index, 1);
+                    }
+                });
+
+                break; // Process first match only
+            }
         }
 
         // TODO: DDM capture
@@ -558,20 +612,23 @@ async function writeSfp(moduleId) {
         await sendBleCommand("[POST] /sif/write");
 
         // 3. Wait for "SIF write start" acknowledgment
-        // Note: In a production implementation, you should listen for this acknowledgment
-        // For now, we'll add a small delay to allow the device to respond
         log("Waiting for device acknowledgment...");
-        await new Promise(resolve => setTimeout(resolve, 500));
+        try {
+            await waitForMessage("SIF write start", 5000);
+            log("Device ready to receive EEPROM data.");
+        } catch (error) {
+            log(`Warning: ${error.message}. Proceeding anyway...`, true);
+            // Continue with write attempt even if acknowledgment times out
+        }
 
         // 4. Chunk and send the binary data
-        // Using conservative 20-byte chunks for maximum compatibility
-        const CHUNK_SIZE = 20;
-        const totalChunks = Math.ceil(eepromData.byteLength / CHUNK_SIZE);
+        // Using conservative chunk size for maximum compatibility
+        const totalChunks = Math.ceil(eepromData.byteLength / BLE_WRITE_CHUNK_SIZE);
         log(`Writing ${eepromData.byteLength} bytes in ${totalChunks} chunks...`);
 
         for (let i = 0; i < totalChunks; i++) {
-            const start = i * CHUNK_SIZE;
-            const end = Math.min(start + CHUNK_SIZE, eepromData.byteLength);
+            const start = i * BLE_WRITE_CHUNK_SIZE;
+            const end = Math.min(start + BLE_WRITE_CHUNK_SIZE, eepromData.byteLength);
             const chunk = eepromData.slice(start, end);
 
             try {

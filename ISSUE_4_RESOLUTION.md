@@ -38,8 +38,8 @@ Updated read operations to use discovered endpoint:
 
 ## Discovered API Endpoints
 
-| Endpoint | Method | Purpose | Status |
-|----------|--------|---------|--------|
+| Endpoint | Payload Type | Purpose | Status |
+|----------|--------------|---------|--------|
 | `/api/1.0/version` | Text | Get firmware version | ✅ Implemented |
 | `[GET] /stats` | Text | Get device status | ✅ Implemented |
 | `[POST] /sif/start` | Text | Read SFP EEPROM | ✅ Implemented |

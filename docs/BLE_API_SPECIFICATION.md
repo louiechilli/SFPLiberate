@@ -430,7 +430,11 @@ async function writeEEPROM(binaryData) {
   }
 
   // 4. Wait for completion
-  await waitForMessage("SIF write");
+  // Device can respond with either "SIF write stop" or "SIF write complete"
+  await Promise.race([
+    waitForMessage("SIF write stop"),
+    waitForMessage("SIF write complete")
+  ]);
 }
 ```
 
