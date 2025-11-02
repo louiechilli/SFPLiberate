@@ -1,8 +1,10 @@
 "use client";
 import { useEffect, useMemo, useState } from 'react';
-import type { ConnectionMode } from '@/src/lib/ble/types';
-import { BLEProxyClient } from '@/src/lib/ble/proxyClient';
-import { isWebBluetoothAvailable } from '@/src/lib/ble/webbluetooth';
+import type { ConnectionMode } from '@/lib/ble/types';
+import { BLEProxyClient } from '@/lib/ble/proxyClient';
+import { isWebBluetoothAvailable } from '@/lib/ble/webbluetooth';
+import { Label } from '@/registry/new-york-v4/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/registry/new-york-v4/ui/select';
 
 export function ConnectionModeSelector(props: { value: ConnectionMode; onChange: (v: ConnectionMode) => void }) {
   const [proxyAvailable, setProxyAvailable] = useState(false);
@@ -22,20 +24,19 @@ export function ConnectionModeSelector(props: { value: ConnectionMode; onChange:
   }
 
   return (
-    <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-      <label htmlFor="connectionMode">Connection Mode:</label>
-      <select
-        id="connectionMode"
-        value={props.value}
-        onChange={(e) => props.onChange(e.target.value as ConnectionMode)}
-        style={{ padding: '4px 8px' }}
-      >
-        <option value="auto">Auto</option>
-        <option value="web-bluetooth">Web Bluetooth</option>
-        {proxyAvailable && <option value="proxy">Proxy</option>}
-      </select>
-      <span style={{ color: 'var(--muted-foreground)' }}>{hint(props.value)}</span>
+    <div className="flex items-center gap-3">
+      <Label htmlFor="connectionMode">Connection Mode</Label>
+      <Select value={props.value} onValueChange={(v) => props.onChange(v as ConnectionMode)}>
+        <SelectTrigger id="connectionMode" className="w-[200px]">
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value="auto">Auto</SelectItem>
+          <SelectItem value="web-bluetooth">Web Bluetooth</SelectItem>
+          {proxyAvailable && <SelectItem value="proxy">Proxy</SelectItem>}
+        </SelectContent>
+      </Select>
+      <span className="text-sm text-neutral-500">{hint(props.value)}</span>
     </div>
   );
 }
-

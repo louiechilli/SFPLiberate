@@ -7,6 +7,10 @@ import { getBleState, subscribe } from '@/lib/ble/store';
 import { ProxyDiscovery } from '@/components/ble/ProxyDiscovery';
 import { ConnectionStatus } from '@/components/ble/ConnectionStatus';
 import { loadActiveProfile, saveActiveProfile } from '@/lib/ble/profile';
+import { Button } from '@/registry/new-york-v4/ui/button';
+import { Input } from '@/registry/new-york-v4/ui/input';
+import { Label } from '@/registry/new-york-v4/ui/label';
+import { toast } from 'sonner';
 
 export function ConnectPanel() {
   const [mode, setMode] = useState<ConnectionMode>('auto');
@@ -33,8 +37,9 @@ export function ConnectPanel() {
     try {
       setBusy(true);
       await connect(mode);
+      toast.success('Connected');
     } catch (e: any) {
-      alert(e?.message || String(e));
+      toast.error(e?.message || String(e));
     } finally {
       setBusy(false);
     }
@@ -44,8 +49,9 @@ export function ConnectPanel() {
     try {
       setBusy(true);
       await requestSfpRead();
+      toast('Requested SFP read');
     } catch (e: any) {
-      alert(e?.message || String(e));
+      toast.error(e?.message || String(e));
     } finally {
       setBusy(false);
     }
@@ -57,9 +63,9 @@ export function ConnectPanel() {
       await saveCurrentModule();
       const list = await listModules();
       setModules(list);
-      alert('Saved');
+      toast.success('Module saved');
     } catch (e: any) {
-      alert(e?.message || String(e));
+      toast.error(e?.message || String(e));
     } finally {
       setBusy(false);
     }
@@ -78,9 +84,9 @@ export function ConnectPanel() {
     try {
       setBusy(true);
       await writeSfpFromModuleId(id);
-      alert('Write flow completed. Consider reading back to verify.');
+      toast.success('Write completed', { description: 'Consider reading back to verify' });
     } catch (e: any) {
-      alert(e?.message || String(e));
+      toast.error(e?.message || String(e));
     } finally {
       setBusy(false);
     }
@@ -90,9 +96,9 @@ export function ConnectPanel() {
     try {
       if (!svc || !wrt || !ntf) throw new Error('All UUIDs are required');
       saveActiveProfile({ serviceUuid: svc, writeCharUuid: wrt, notifyCharUuid: ntf });
-      alert('Profile saved');
+      toast.success('Profile saved');
     } catch (e: any) {
-      alert(e?.message || String(e));
+      toast.error(e?.message || String(e));
     }
   };
 
@@ -105,12 +111,12 @@ export function ConnectPanel() {
         setSvc(cfg.default_profile.serviceUuid);
         setWrt(cfg.default_profile.writeCharUuid);
         setNtf(cfg.default_profile.notifyCharUuid);
-        alert('Default profile loaded');
+        toast.success('Default profile loaded');
       } else {
-        alert('No default profile provided by backend');
+        toast('No default profile provided by backend');
       }
     } catch (e: any) {
-      alert(e?.message || String(e));
+      toast.error(e?.message || String(e));
     }
   };
 
@@ -129,16 +135,16 @@ export function ConnectPanel() {
   return (
     <div style={{ display: 'grid', gap: 12 }}>
       <ConnectionModeSelector value={mode} onChange={setMode} />
-      <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-        <button onClick={onConnect} disabled={busy} id="connectButton">
+      <div className="flex items-center gap-2">
+        <Button onClick={onConnect} disabled={busy} id="connectButton">
           {state.connected ? 'Reconnect' : 'Connect'}
-        </button>
-        <button onClick={onRead} disabled={!state.connected || busy} id="readSfpButton">
+        </Button>
+        <Button onClick={onRead} disabled={!state.connected || busy} id="readSfpButton" variant="secondary">
           Read SFP
-        </button>
-        <button onClick={onSave} disabled={!state.rawEepromData || busy} id="saveModuleButton">
+        </Button>
+        <Button onClick={onSave} disabled={!state.rawEepromData || busy} id="saveModuleButton" variant="outline">
           Save Module
-        </button>
+        </Button>
       </div>
       <div style={{ display: 'flex', gap: 16 }}>
         <div>
@@ -156,9 +162,9 @@ export function ConnectPanel() {
                   #{m.id} {m.vendor} {m.model} {m.serial}
                 </div>
                 <div className="ml-3">
-                  <button onClick={() => onWriteModule(m.id)} disabled={busy || !state.connected}>
+                  <Button onClick={() => onWriteModule(m.id)} disabled={busy || !state.connected} size="sm">
                     Write
-                  </button>
+                  </Button>
                 </div>
               </li>
             ))}
@@ -171,21 +177,32 @@ export function ConnectPanel() {
       </div>
       <div>
         <strong>Profile</strong>
-        <div className="mt-2 grid gap-2" style={{ maxWidth: 720 }}>
-          <input placeholder="Service UUID" value={svc} onChange={(e) => setSvc(e.target.value)} />
-          <input placeholder="Write Char UUID" value={wrt} onChange={(e) => setWrt(e.target.value)} />
-          <input placeholder="Notify Char UUID" value={ntf} onChange={(e) => setNtf(e.target.value)} />
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button onClick={onSaveProfile}>Save Profile</button>
-            <button onClick={onLoadDefaultProfile}>Load Default from Backend</button>
+        <div className="mt-2 grid gap-3 sm:grid-cols-3" style={{ maxWidth: 880 }}>
+          <div className="grid gap-1">
+            <Label>Service UUID</Label>
+            <Input placeholder="Service UUID" value={svc} onChange={(e) => setSvc(e.target.value)} />
           </div>
+          <div className="grid gap-1">
+            <Label>Write Char UUID</Label>
+            <Input placeholder="Write Char UUID" value={wrt} onChange={(e) => setWrt(e.target.value)} />
+          </div>
+          <div className="grid gap-1">
+            <Label>Notify Char UUID</Label>
+            <Input placeholder="Notify Char UUID" value={ntf} onChange={(e) => setNtf(e.target.value)} />
+          </div>
+        </div>
+        <div className="mt-2 flex items-center gap-2">
+          <Button onClick={onSaveProfile}>Save Profile</Button>
+          <Button onClick={onLoadDefaultProfile} variant="secondary">
+            Load Default from Backend
+          </Button>
         </div>
       </div>
       <div>
         <strong>Proxy</strong>
-        <div className="mt-2" style={{ display: 'flex', gap: 8 }}>
-          <input placeholder="Device Address (optional)" value={proxyAddr} onChange={(e) => setProxyAddr(e.target.value)} />
-          <button onClick={onProxyConnectAddress} disabled={busy}>Connect via Proxy (by address)</button>
+        <div className="mt-2 flex items-center gap-2">
+          <Input placeholder="Device Address (optional)" value={proxyAddr} onChange={(e) => setProxyAddr(e.target.value)} />
+          <Button onClick={onProxyConnectAddress} disabled={busy}>Connect via Proxy (by address)</Button>
         </div>
       </div>
       <div>
