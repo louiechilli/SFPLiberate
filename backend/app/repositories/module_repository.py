@@ -43,5 +43,6 @@ class ModuleRepository:
         module = await self.get_by_id(module_id)
         if module:
             await self.session.delete(module)
+            await self.session.flush()
             return True
         return False
