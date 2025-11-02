@@ -400,13 +400,9 @@ function handleNotifications(event) {
                 );
                 matchedListeners.forEach(listener => {
                     listener.resolve(textResponse);
-                    // Remove from array
-                    const index = messageListeners.indexOf(listener);
-                    if (index !== -1) {
-                        messageListeners.splice(index, 1);
-                    }
                 });
-
+                // Remove all matched listeners in one pass
+                messageListeners = messageListeners.filter(l => !matchedListeners.includes(l));
                 break; // Process first match only
             }
         }
