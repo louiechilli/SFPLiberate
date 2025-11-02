@@ -24,7 +24,7 @@ Thanks for your interest in contributing to SFPLiberate! We welcome contribution
 
 ### Prerequisites
 - Docker and Docker Compose
-- For BLE testing: Ubiquiti SFP Wizard (UACC‑SFP‑Wizard) hardware
+- For BLE testing: Ubiquiti SFP Wizard (UACC-SFP-Wizard) hardware
 - For protocol research: nRF Connect app (mobile or desktop)
 - Supported browser: Chrome/Edge (Safari has limited Web Bluetooth support)
 
