@@ -433,10 +433,10 @@ def add_module(name: str, vendor: str, model: str, serial: str,
 - Discovering new constraints → update `.github/copilot-instructions.md` pitfalls section
 - Completing TODO items → update `TODO.md` and remove `TODO` suffixes from code
 
-**README.md:** User-facing features, setup, roadmap  
-**TODO.md:** Task tracking, backlog, known issues  
-**CONTRIBUTING.md:** This file—development process  
-**.github/copilot-instructions.md:** Architecture, patterns, pitfalls for AI agents
+- **`README.md`**: User-facing features, setup, roadmap
+- **`TODO.md`**: Task tracking, backlog, known issues
+- **`CONTRIBUTING.md`**: This file—development process
+- **`.github/copilot-instructions.md`**: Architecture, patterns, pitfalls for AI agents
 
 ### Documentation Style
 - Use clear, active voice
