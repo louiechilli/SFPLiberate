@@ -1,0 +1,26 @@
+version: "3.8"
+
+services:
+  backend:
+    build:
+      context: ./backend
+    container_name: sfpliberate-backend
+    environment:
+      - DATABASE_FILE=/app/data/sfp_library.db
+    volumes:
+      - backend_data:/app/data
+    expose:
+      - "80"
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: sfpliberate-frontend
+    depends_on:
+      - backend
+    ports:
+      - "8080:80"
+
+volumes:
+  backend_data:
+    driver: local

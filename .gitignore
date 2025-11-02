@@ -1,0 +1,27 @@
+# macOS
+.DS_Store
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+env/
+.pytest_cache/
+artifacts/
+
+# SQLite DBs
+*.db
+
+# Node / Frontend
+node_modules/
+dist/
+build/
+
+# Docker
+*.log
+.env
+
+# IDEs
+.idea/
+.vscode/
