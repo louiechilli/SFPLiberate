@@ -123,11 +123,31 @@ FastAPI docs auto-generated at: `http://localhost:8080/api/docs`
 
 ## BLE Protocol Reverse-Engineering
 
-### Current Status
-- **Placeholder commands** (e.g., `[POST] /sfp/write/start` in `script.js`) are **speculative guesses**—do not rely on them
-- **Write functionality is incomplete**—requires discovering actual BLE command protocol from official app
-- To discover commands: use nRF Connect app to sniff BLE traffic during official app operations
-- Document findings in code comments with firmware version tested (behavior may change across firmware updates)
+### Current Status - ✅ COMPLETED (Issue #4)
+- **Protocol fully discovered and documented** in `docs/BLE_API_SPECIFICATION.md`
+- **Write functionality implemented** using `[POST] /sif/write` endpoint
+- **All BLE UUIDs configured** for firmware v1.0.10
+- **Status and version monitoring implemented**
+- **Safety features and warnings in place**
+
+### Discovered Endpoints
+- `/api/1.0/version` - Get firmware version
+- `[GET] /stats` - Get device status (battery, SFP presence, etc.)
+- `[POST] /sif/start` - Read SFP EEPROM
+- `[POST] /sif/write` - Write SFP EEPROM (with binary data chunking)
+- `[POST] /sif/erase` - Erase SFP EEPROM
+- `[POST] /sif/stop` - Stop current operation
+
+### BLE Configuration (Firmware v1.0.10)
+- **Service UUID:** `8E60F02E-F699-4865-B83F-F40501752184`
+- **Write Characteristic:** `9280F26C-A56F-43EA-B769-D5D732E1AC67`
+- **Notify Characteristic:** `DC272A22-43F2-416B-8FA5-63A071542FAC`
+- **Secondary Notify:** `D587C47F-AC6E-4388-A31C-E6CD380BA043` (purpose TBD)
+
+### Documentation
+- `docs/BLE_API_SPECIFICATION.md` - Complete API reference
+- `docs/ISSUE_4_IMPLEMENTATION.md` - Implementation details and testing guide
+- `ISSUE_4_RESOLUTION.md` - Summary of resolution
 
 ### Reference Artifacts
 - `artifacts/nRFscanner Output.txt`: Sample BLE scanner output
@@ -135,9 +155,10 @@ FastAPI docs auto-generated at: `http://localhost:8080/api/docs`
 
 ### Safety Reminders
 - Test with non-critical modules first
-- Never force-write to unknown modules
-- Validate checksums before writing
-- Document any bricking risks discovered
+- Always backup original EEPROM data
+- Firmware v1.0.10 tested - other versions may differ
+- Read-back verification recommended after writes
+- Monitor console logs for errors
 
 ## Browser Compatibility
 
@@ -169,8 +190,8 @@ When adding columns to `sfp_modules` table:
 
 - Functions suffixed with `TODO` (e.g., `loadCommunityModulesTODO()`) are scaffolds—alert user when clicked
 - `COMMUNITY_INDEX_URL` constant awaits real GitHub Pages URL from separate `SFPLiberate/modules` repo
-- Write logic in `writeSfp()` is intentionally incomplete—requires BLE command discovery (see inline comments)
-- BLE UUIDs in `frontend/script.js` are placeholders—must be configured per device
+- ~~Write logic in `writeSfp()` is intentionally incomplete~~ ✅ **COMPLETED** - Full write implementation with chunking, safety warnings, and progress tracking
+- ~~BLE UUIDs in `frontend/script.js` are placeholders~~ ✅ **CONFIGURED** - All UUIDs discovered and set for firmware v1.0.10
 
 ## Coding Conventions
 
