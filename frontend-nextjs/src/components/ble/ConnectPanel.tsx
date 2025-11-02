@@ -205,14 +205,7 @@ export function ConnectPanel() {
           <Button onClick={onProxyConnectAddress} disabled={busy}>Connect via Proxy (by address)</Button>
         </div>
       </div>
-      <div>
-        <strong>Log</strong>
-        <div style={{ border: '1px solid var(--border)', padding: 8, maxHeight: 200, overflow: 'auto' }} id="logConsole">
-          {state.logs.map((l, i) => (
-            <div key={i}>{l}</div>
-          ))}
-        </div>
-      </div>
+      
     </div>
   );
 }

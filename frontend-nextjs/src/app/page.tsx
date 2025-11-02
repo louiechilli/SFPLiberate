@@ -1,7 +1,7 @@
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/registry/new-york-v4/ui/card';
 import { ConnectPanel } from '@/components/ble/ConnectPanel';
 import { ConnectionStatus } from '@/components/ble/ConnectionStatus';
-import { LogsPanel } from '@/components/ble/LogsPanel';
+import { ActivityTabs } from '@/components/ble/ActivityTabs';
 
 export default function Page() {
   return (
@@ -40,7 +40,7 @@ export default function Page() {
             <CardDescription>Recent actions and device messages</CardDescription>
           </CardHeader>
           <CardContent>
-            <LogsPanel />
+            <ActivityTabs />
           </CardContent>
         </Card>
       </div>
