@@ -13,6 +13,8 @@ env:
   REGISTRY: ghcr.io
   IMAGE_BACKEND: ghcr.io/${{ github.repository_owner }}/sfpliberate-backend
   IMAGE_FRONTEND: ghcr.io/${{ github.repository_owner }}/sfpliberate-frontend
+  # Note: Appwrite deployments are handled separately via deploy-appwrite.yml
+  # This workflow builds standalone Docker images only (no Appwrite references)
 
 jobs:
   # Backend testing with matrix strategy
@@ -117,10 +119,13 @@ jobs:
         working-directory: ./frontend
         run: npm run lint
 
-      - name: Build application
+      - name: Build application (standalone mode)
         working-directory: ./frontend
         env:
           NEXT_TELEMETRY_DISABLED: 1
+          DEPLOYMENT_MODE: standalone
+          NEXT_PUBLIC_DEPLOYMENT_MODE: standalone
+          NEXT_PUBLIC_ENABLE_AUTH: false
         run: npm run build
 
   # Docker build and push
@@ -165,7 +170,7 @@ jobs:
             type=sha,prefix={{branch}}-
             type=raw,value=latest,enable={{is_default_branch}}
 
-      - name: Build and push ${{ matrix.service }} image
+      - name: Build and push ${{ matrix.service }} image (standalone mode)
         uses: docker/build-push-action@v5
         with:
           context: ./${{ matrix.service }}
@@ -179,6 +184,7 @@ jobs:
             BUILD_DATE=${{ github.event.head_commit.timestamp }}
             VCS_REF=${{ github.sha }}
             VERSION=${{ github.ref_name }}
+            DEPLOYMENT_MODE=standalone
 
   # Integration tests
   integration-test:
