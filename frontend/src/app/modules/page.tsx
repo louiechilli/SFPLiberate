@@ -80,7 +80,23 @@ export default function ModulesPage() {
         id: 'actions',
         header: 'Actions',
         cell: ({ row }) => (
-          <Button size="sm" onClick={() => onWrite(row.original.id)}>Write</Button>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button size="sm" variant="default">Write</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent>
+              <AlertDialogHeader>
+                <AlertDialogTitle>Write module #{row.original.id} to device?</AlertDialogTitle>
+                <AlertDialogDescription>
+                  Writing EEPROM can permanently damage your module if incorrect data is used. Make sure you have a backup and the correct profile is selected.
+                </AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                <AlertDialogAction onClick={() => onWrite(row.original.id)}>Write</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
         ),
       },
     ],
@@ -151,9 +167,6 @@ export default function ModulesPage() {
                   <SelectItem value="50">50 / page</SelectItem>
                 </SelectContent>
               </Select>
-              <Button variant="secondary" onClick={load} disabled={loading}>
-                {loading ? 'Refreshing…' : 'Refresh'}
-              </Button>
             </div>
           </div>
           <div className="overflow-x-auto">
@@ -186,27 +199,7 @@ export default function ModulesPage() {
                   <TableRow key={row.id}>
                     {row.getVisibleCells().map((cell) => (
                       <TableCell key={cell.id}>
-                        {cell.column.id === 'actions' ? (
-                          <AlertDialog>
-                            <AlertDialogTrigger asChild>
-                              <Button size="sm" variant="default">Write</Button>
-                            </AlertDialogTrigger>
-                            <AlertDialogContent>
-                              <AlertDialogHeader>
-                                <AlertDialogTitle>Write module #{row.original.id} to device?</AlertDialogTitle>
-                                <AlertDialogDescription>
-                                  Writing EEPROM can permanently damage your module if incorrect data is used. Make sure you have a backup and the correct profile is selected.
-                                </AlertDialogDescription>
-                              </AlertDialogHeader>
-                              <AlertDialogFooter>
-                                <AlertDialogCancel>Cancel</AlertDialogCancel>
-                                <AlertDialogAction onClick={() => onWrite(row.original.id)}>Write</AlertDialogAction>
-                              </AlertDialogFooter>
-                            </AlertDialogContent>
-                          </AlertDialog>
-                        ) : (
-                          flexRender(cell.column.columnDef.cell, cell.getContext())
-                        )}
+                        {flexRender(cell.column.columnDef.cell, cell.getContext())}
                       </TableCell>
                     ))}
                   </TableRow>

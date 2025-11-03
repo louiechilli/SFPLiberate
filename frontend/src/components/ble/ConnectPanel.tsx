@@ -40,7 +40,7 @@ export function ConnectPanel() {
         `availability: ${res.availability === null ? 'unknown' : res.availability ? 'available' : 'unavailable'}`,
       ].join(' · ');
       setSupport({ summary: points, reasons: res.reasons });
-    }).catch(() => {});
+    }).catch((error) => console.error('Failed to detect Bluetooth support:', error));
     const p = loadActiveProfile();
     if (p) {
       setSvc(p.serviceUuid);

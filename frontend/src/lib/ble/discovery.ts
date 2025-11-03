@@ -37,19 +37,18 @@ export async function scanForSfp(timeoutMs = 6000): Promise<AdvResult | null> {
       const serviceUuids: string[] = Array.from(new Set([...(event.uuids || event.serviceUuids || [])]));
       // Stop scanning ASAP
       try { scan?.stop && scan.stop(); } catch {}
-      try { (navigator as any).removeEventListener?.('advertisementreceived', onAdv as any); } catch {}
+      try { bluetooth.removeEventListener?.('advertisementreceived', onAdv); } catch {}
       resolveFn!({ name: event.device?.name, uuids: serviceUuids });
     } catch {
       // ignore
     }
   };
 
-  try { (navigator as any).addEventListener?.('advertisementreceived', onAdv as any); } catch {}
   try { bluetooth.addEventListener?.('advertisementreceived', onAdv); } catch {}
 
   setTimeout(() => {
     try { scan?.stop && scan.stop(); } catch {}
-    try { (navigator as any).removeEventListener?.('advertisementreceived', onAdv as any); } catch {}
+    try { bluetooth.removeEventListener?.('advertisementreceived', onAdv); } catch {}
     resolveFn!(null);
   }, timeoutMs);
 

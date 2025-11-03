@@ -80,21 +80,38 @@ export function DirectDiscovery() {
   const onDiscoverAndConnect = useCallback(async () => {
     try {
       setBusy(true);
+      let connectedViaScan = false;
       // 1) Try scanning path (best UX for direct connect)
       if (canScan()) {
-        const adv = await scanForSfp(7000);
-        if (adv && adv.uuids && adv.uuids.length > 0) {
-          // Reopen chooser with namePrefix and discovered optionalServices
-          // @ts-expect-error Web Bluetooth typings not included by default
-          const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'SFP' }, { namePrefix: 'sfp' }], optionalServices: adv.uuids });
-          const ok = await connectAndInferProfileFromServices(device, adv.uuids);
-          if (ok) {
-            await connect('web-bluetooth' as ConnectionMode);
-            toast.success('Connected (Direct)');
+        try {
+          const adv = await scanForSfp(7000);
+          if (adv && adv.uuids && adv.uuids.length > 0) {
+            // Reopen chooser with namePrefix and discovered optionalServices
+            // @ts-expect-error Web Bluetooth typings not included by default
+            const device = await navigator.bluetooth.requestDevice({ filters: [{ namePrefix: 'SFP' }, { namePrefix: 'sfp' }], optionalServices: adv.uuids });
+            const ok = await connectAndInferProfileFromServices(device, adv.uuids);
+            if (ok) {
+              await connect('web-bluetooth' as ConnectionMode);
+              toast.success('Connected (Direct)');
+              connectedViaScan = true;
+            }
+          }
+        } catch (e: any) {
+          // If the user cancels the chooser, stop without falling back
+          if (e && e.name === 'NotFoundError') {
+            setBusy(false);
             return;
           }
+          // Otherwise, continue to proxy fallback
+          console.warn('Direct scan/connect failed; falling back to proxy.', e);
         }
       }
+
+      if (connectedViaScan) {
+        setBusy(false);
+        return;
+      }
+
       // 2) Fallback silently to proxy discovery + connect
       try {
         const results = await discoverProxyDevices({ timeout: 5 });
