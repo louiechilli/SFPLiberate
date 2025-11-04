@@ -4,17 +4,6 @@
 
 name: sfpliberate
 
-# Shared BLE proxy config (anchor defined before use)
-x-ble-proxy-config: &ble-proxy-config
-  profiles:
-    - ble-proxy
-  devices:
-    - /dev/bus/usb:/dev/bus/usb
-  cap_add:
-    - NET_ADMIN
-  environment:
-    - BLE_PROXY_ENABLED=true
-
 services:
   backend:
     build:
@@ -49,28 +38,25 @@ services:
       - LOG_LEVEL=${LOG_LEVEL:-info}
       - PYTHONUNBUFFERED=1
       - ENVIRONMENT=${ENVIRONMENT:-production}
-      # BLE Proxy (optional)
-      - BLE_PROXY_ENABLED=${BLE_PROXY_ENABLED:-false}
-      - BLE_PROXY_DEFAULT_TIMEOUT=${BLE_PROXY_DEFAULT_TIMEOUT:-5}
-      - BLE_PROXY_ADAPTER=${BLE_PROXY_ADAPTER:-}
+      # ESPHome Proxy (optional)
+      - ESPHOME_PROXY_MODE=${ESPHOME_PROXY_MODE:-false}
 
     # Volumes
     volumes:
       - backend_data:/app/data:rw
       # Bind-mount .env to allow backend to persist profile UUIDs (self-hosted)
       - ./.env:/app/.env:rw
-      # Optional: D-Bus socket for BlueZ (required by bleak on many distros)
-      # Comment these lines if your host does not have these sockets.
-      - /var/run/dbus/system_bus_socket:/var/run/dbus/system_bus_socket:ro
-      - /run/dbus/system_bus_socket:/run/dbus/system_bus_socket:ro
 
     # Network
-    networks:
-      - sfp-internal
+    # Note: For ESPHome proxy to work, backend needs to reach LAN.
+    # Comment out 'networks' and use 'network_mode: host' when using ESPHome
+    # networks:
+    #   - sfp-internal
+    network_mode: host
 
-    # Expose port internally (not to host)
-    expose:
-      - "80"
+    # Expose port internally (not to host) - not needed in host mode
+    # expose:
+    #   - "80"
 
     # Resource limits (adjust based on your needs)
     deploy:
@@ -132,17 +118,18 @@ services:
     environment:
       - ENVIRONMENT=${ENVIRONMENT:-production}
       # Backend URL used for Next.js rewrites in standalone mode
-      - BACKEND_URL=http://backend
+      - BACKEND_URL=http://localhost
       # Note: Deployment mode is AUTO-DETECTED by frontend
       # Standalone mode when APPWRITE_SITE_* variables are absent (default here)
+      - PORT=3000
 
-      # Ports exposed to host
-    ports:
-      - "${HOST_PORT:-8080}:3000"
+    # Network - use host mode to reach backend on host network
+    network_mode: host
+    # In host mode, frontend binds directly to port 3000 on host
+    # Access via reverse-proxy service on port 8080
 
-    # Network
-    networks:
-      - sfp-internal
+    # networks:
+    #   - sfp-internal
 
     # Resource limits
     deploy:
@@ -165,10 +152,10 @@ services:
     # Security options
     security_opt:
       - no-new-privileges:true
-    read_only: true
+    # Disabled read_only for Next.js 16 standalone mode compatibility
+    # read_only: true
     tmpfs:
       - /tmp
-      - /app/.next
 
     # Labels
     labels:
@@ -180,6 +167,62 @@ services:
       - "traefik.http.routers.sfpliberate.entrypoints=websecure"
       - "traefik.http.routers.sfpliberate.tls.certresolver=letsencrypt"
       - "traefik.http.services.sfpliberate.loadbalancer.server.port=3000"
+
+  reverse-proxy:
+    image: nginx:alpine
+    container_name: sfpliberate-reverse-proxy
+    restart: unless-stopped
+
+    depends_on:
+      frontend:
+        condition: service_healthy
+        restart: true
+
+    # Expose port 8080 to host
+    ports:
+      - "${HOST_PORT:-8080}:80"
+
+    # Bridge network to connect to host services
+    network_mode: bridge
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+
+    # Simple nginx config to proxy to frontend on host
+    volumes:
+      - type: tmpfs
+        target: /var/cache/nginx
+      - type: tmpfs
+        target: /var/run
+
+    command: |
+      sh -c 'echo "
+      server {
+        listen 80;
+        server_name localhost;
+
+        location / {
+          proxy_pass http://host.docker.internal:3000;
+          proxy_http_version 1.1;
+          proxy_set_header Upgrade \$$http_upgrade;
+          proxy_set_header Connection \"upgrade\";
+          proxy_set_header Host \$$host;
+          proxy_set_header X-Real-IP \$$remote_addr;
+          proxy_set_header X-Forwarded-For \$$proxy_add_x_forwarded_for;
+          proxy_set_header X-Forwarded-Proto \$$scheme;
+        }
+      }
+      " > /etc/nginx/conf.d/default.conf && nginx -g "daemon off;"'
+
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost/"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 5s
+
+    labels:
+      - "com.sfpliberate.service=reverse-proxy"
+      - "com.sfpliberate.description=Nginx reverse proxy for port 8080 access"
 
 networks:
   sfp-internal:
