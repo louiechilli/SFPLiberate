@@ -113,10 +113,7 @@ class HomeAssistantBluetoothClient:
         Returns:
             List of discovered devices matching configured patterns
         """
-        # Refresh device list
-        await self._discover_devices()
-
-        # Return cached devices
+        # Return cached devices, which are populated at startup and kept up-to-date by the WebSocket listener.
         return list(self._discovered_devices.values())
 
     async def connect_to_device(self, mac_address: str) -> HADeviceConnectionResponse:
