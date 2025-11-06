@@ -59,7 +59,7 @@ async def lifespan(app: FastAPI):
             await bluetooth_service.start()
             logger.info("esphome_proxy_service_started")
         except Exception as e:
-            logger.error("esphome_proxy_service_startup_failed", error=str(e))
+            logger.error("esphome_proxy_service_startup_failed", error=str(e), exc_info=True)
 
     yield
 
