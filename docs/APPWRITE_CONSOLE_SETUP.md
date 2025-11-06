@@ -28,11 +28,13 @@ Or navigate: Console → Sites → sfpliberate → Settings
 
 Go to: **Settings → Environment Variables → Add Variable**
 
-Add these 9 variables:
+Add these 11 variables:
 
 | Variable Name | Value | Description |
 |---------------|-------|-------------|
 | `DEPLOYMENT_MODE` | `appwrite` | Triggers Appwrite mode |
+| `APPWRITE_ENDPOINT` | `https://nyc.cloud.appwrite.io/v1` | Appwrite API endpoint (fallback) |
+| `APPWRITE_PROJECT_ID` | `<your-project-id>` | Appwrite Project ID (fallback) |
 | `BACKEND_URL` | `https://api.sfplib.com` | Backend Function URL |
 | `PUBLIC_URL` | `https://app.sfplib.com` | Public site URL |
 | `APPWRITE_ENABLE_AUTH` | `true` | Enable authentication |
