@@ -42,8 +42,8 @@ export interface SignalStrength {
  * -50 and above: Excellent (100%)
  * -60 to -51: Good (75%)
  * -70 to -61: Fair (50%)
- * -80 to -71: Poor (25%)
- * Below -80: Very Poor (0%)
+ * -70 to -61: Fair (50%)
+ * Below -70: Poor (25%)
  */
 export function getSignalStrength(rssi: number): SignalStrength {
   let level: SignalStrength['level'];
