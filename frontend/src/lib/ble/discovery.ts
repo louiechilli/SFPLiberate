@@ -3,7 +3,7 @@ import type { SfpProfile } from './types';
 
 /**
  * Simplified Discovery API for SFP Wizard devices
- * 
+ *
  * Approach:
  * 1. Use requestDevice with name filters (widely supported)
  * 2. After user selects device, enumerate all services/characteristics
@@ -49,7 +49,7 @@ export async function discoverAndConnectSfpDevice(): Promise<DiscoveryResult> {
 
 /**
  * Request a device from the user with SFP name filter
- * Uses standard GATT services in optionalServices to allow service enumeration
+ * Uses standard GATT services + known SFP device services in optionalServices
  */
 async function requestSfpDevice(): Promise<any> {
   const bluetooth = (navigator as any).bluetooth;
@@ -58,12 +58,21 @@ async function requestSfpDevice(): Promise<any> {
     throw createError('not-supported', 'Web Bluetooth API is not available in this browser.');
   }
 
-  // Standard GATT service UUIDs that must be in optionalServices to allow service enumeration
-  // These are always available and allow us to discover all other services
+  // Standard GATT services that allow basic device info
   const standardServices = [
     '00001800-0000-1000-8000-00805f9b34fb', // Generic Access (GAP)
     '00001801-0000-1000-8000-00805f9b34fb', // Generic Attribute (GATT)
   ];
+
+  // Known SFP Wizard service UUIDs (firmware v1.0.10)
+  // These must be in optionalServices to allow Web Bluetooth to enumerate them
+  const knownSfpServices = [
+    '8e60f02e-f699-4865-b83f-f40501752184', // SFP Wizard primary service
+    '0b9676ee-8352-440a-bf80-61541d578fcf', // SFP Wizard secondary service
+  ];
+
+  // Combine all services we want to access
+  const allServices = [...standardServices, ...knownSfpServices];
 
   try {
     // Try with name filter first (best UX)
@@ -73,7 +82,7 @@ async function requestSfpDevice(): Promise<any> {
         { namePrefix: 'sfp' },
         { namePrefix: 'Sfp' },
       ],
-      optionalServices: standardServices, // Allow service enumeration
+      optionalServices: allServices, // Allow service enumeration
     });
 
     if (!device) {
@@ -92,7 +101,7 @@ async function requestSfpDevice(): Promise<any> {
       console.warn('Name filter failed, trying acceptAllDevices fallback');
       const device = await bluetooth.requestDevice({
         acceptAllDevices: true,
-        optionalServices: standardServices, // Allow service enumeration
+        optionalServices: allServices, // Allow service enumeration
       });
 
       // Check if selected device name contains 'sfp'
