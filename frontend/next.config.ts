@@ -42,9 +42,10 @@ const standaloneAppwriteAlias = require.resolve('./src/lib/appwrite-standalone')
 
 // https://nextjs.org/docs/pages/api-reference/next-config-js
 const nextConfig: NextConfig = {
-    // Output mode: standalone (SSR) for ALL deployment modes
-    // This enables unified API pattern via rewrites
-    output: 'standalone',
+    // Output mode: standalone for Docker, but NOT for Appwrite Sites
+    // Appwrite Sites docs: "Ensure you don't set output in next.config.js" for SSR
+    // https://appwrite.io/docs/products/sites/rendering/ssr
+    ...(isAppwrite ? {} : { output: 'standalone' }),
 
     env: {
         NEXT_PUBLIC_DEPLOYMENT_MODE: deploymentMode,
